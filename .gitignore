@@ -10,12 +10,15 @@ Release/
 Thumbs.db
 .DS_Store
 
-# ===== Media files (DO NOT track) =====
-*.jpg
-*.jpeg
-*.png
+# Ignore media everywhere EXCEPT documentation
 *.mp4
 *.mov
+
+# Allow images inside media folder
+!media/*.jpg
+!media/*.jpeg
+!media/*.png
+
 
 # ===== PDFs (optional, comment if needed) =====
 # *.pdf
