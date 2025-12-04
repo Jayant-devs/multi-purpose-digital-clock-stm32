@@ -1,5 +1,21 @@
 /* USER CODE BEGIN Header */
 /**
+ * * @brief Multi-Purpose Digital Clock using STM32F446RE
+ *
+ * Features:
+ *  - RTC based 24-hour digital clock with battery backup
+ *  - Stopwatch using system tick (HAL_GetTick)
+ *  - Interactive time-setting mode using push buttons
+ *  - 16x2 LCD display (4-bit parallel mode)
+ *  - Startup animation using LCD custom characters
+ *
+ * Software Design:
+ *  - Implemented using a finite state machine (FSM)
+ *  - Modes: CLOCK → STOPWATCH → SETTINGS
+ *  - Modular driver-based structure for LCD handling
+ *
+ * Author: Jayant Chopra (24UEC114)
+ * Department: ECE, LNMIIT
   ******************************************************************************
   * @file           : main.c
   * @brief          : Main program body
@@ -13,6 +29,7 @@
   * in the root directory of this software component.
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
+  ******************************************************************************
   ******************************************************************************
   */
 /* USER CODE END Header */
@@ -41,24 +58,46 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+/* ================= GLOBAL APPLICATION VARIABLES =================
+ * RTC structures store time and date maintained by the STM32 RTC
+ * peripheral, allowing time persistence across resets.
+ *
+ * Stopwatch variables rely on system tick counting to provide
+ * high-resolution timing independent of the RTC.
+ * ================================================================= */
+
 RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
 
+// Current real-time clock values fetched from hardware RTC
 RTC_TimeTypeDef currentTime;
 RTC_DateTypeDef currentDate;
-// RTC_TimeTypeDef stopwatchStartTime;  // REMOVE THIS
 
-// Stopwatch variables
-uint32_t stopwatchStartTime = 0;  // CHANGE TO uint32_t
-uint32_t stopwatchElapsed = 0;
-uint8_t stopwatchRunning = 0;
+// Stopwatch timing variables
+uint32_t stopwatchStartTime = 0; // Start timestamp in milliseconds
+uint32_t stopwatchElapsed = 0;   // Elapsed time in milliseconds
+uint8_t stopwatchRunning = 0;    // Stopwatch state flag
+/**
+ * @brief Application display modes (Finite State Machine)
+ *
+ * MODE_CLOCK     : Normal time display using RTC
+ * MODE_STOPWATCH : Stopwatch operation mode
+ * MODE_SETTINGS  : User configuration for time setting
+ */
 
 typedef enum {
     MODE_CLOCK,
     MODE_STOPWATCH,
     MODE_SETTINGS
 } DisplayMode_t;
+/**
+ * @brief Time setting sub-modes
+ *
+ * SET_HOURS   : Adjust hours field
+ * SET_MINUTES : Adjust minutes field
+ * SET_SAVE    : Commit time to RTC and exit settings
+ */
 
 typedef enum {
     SET_HOURS,
@@ -75,6 +114,12 @@ uint8_t settingBlink = 0;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_RTC_Init(void);
+
+/* ================= FUNCTION PROTOTYPES =================
+ * Display functions handle LCD visualization for each mode.
+ * Button handlers implement debounced user interaction.
+ * ====================================================== */
+
 /* USER CODE BEGIN PFP */
 void displayClock(void);
 void displayStopwatch(void);
@@ -97,6 +142,14 @@ void playRocketAnimation(void);  // ADD THIS LINE
   * @brief  The application entry point.
   * @retval int
   */
+
+/**
+ * @brief Application entry point
+ *
+ * Performs system initialization, plays startup animation,
+ * and continuously executes the main application loop.
+ */
+
 int main(void)
 {
 
@@ -107,6 +160,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	// Initialize HAL library and system tick timer
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -114,6 +168,7 @@ int main(void)
   /* USER CODE END Init */
 
   /* Configure the system clock */
+  // Configure system clocks and RTC oscillator
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
@@ -122,12 +177,14 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
+  // Initialize LCD in 4-bit mode
+  // Display startup animation and system status
 
   LCD_Init();
 
     // Play the rocket launch splash screen
+
     playRocketAnimation();
     HAL_Delay(2000); // Hold the "SYSTEM ONLINE" message
 
@@ -137,10 +194,16 @@ int main(void)
   LCD_WriteStringXY(1, 0, "Clock Ready!");
   HAL_Delay(2000);
   LCD_Clear();
+    //start the RTC so time begins from 00:00:00 here
+    MX_RTC_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  // ================= MAIN APPLICATION LOOP =================
+  // Handles input, updates stopwatch, and refreshes display
+  // =========================================================
+
   while (1)
   {
     /* USER CODE END WHILE */
@@ -343,10 +406,10 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 // Display clock mode
-// Display clock mode
-// In displayClock() - change to 16 characters max
+//Fetches time from RTC and formats it for a 16x2 LCD.
 void displayClock(void) {
     char buffer[17];
+    // Fetch current time and date from RTC hardware
 
     HAL_RTC_GetTime(&hrtc, &currentTime, RTC_FORMAT_BIN);
     HAL_RTC_GetDate(&hrtc, &currentDate, RTC_FORMAT_BIN);
@@ -361,7 +424,13 @@ void displayClock(void) {
 }
 
 // Display stopwatch mode
-// In displayStopwatch() - fix the long string
+/**
+ * @brief Displays stopwatch time and status
+ *
+ * Stopwatch time is derived from system tick counter
+ * for millisecond-level resolution.
+ */
+
 void displayStopwatch(void) {
     char buffer[17];
     uint32_t hours, minutes, seconds;
@@ -406,9 +475,16 @@ void updateDisplay(void) {
 }
 
 // Handle mode button (PB9)
-// Handle mode button (PB9)
+/**
+ * @brief Handles mode switching using MODE button
+ *
+ * Cycles through CLOCK → STOPWATCH → SETTINGS modes.
+ * Software debouncing is implemented using HAL_GetTick().
+ */
+
 void handleModeButton(void) {
     static uint32_t lastPress = 0;
+    // Debounce logic to prevent multiple triggers
 
     if(HAL_GPIO_ReadPin(mode_pin_GPIO_Port, mode_pin_Pin) == GPIO_PIN_RESET) {
         if(HAL_GetTick() - lastPress > 300) {
@@ -452,6 +528,13 @@ void handleStopwatchButtons(void) {
         }
     }
 }
+/**
+ * @brief Handles user input in SETTINGS mode
+ *
+ * START/STOP button switches between hour/minute/save fields.
+ * RESET button increments selected field or confirms save.
+ */
+
 void handleSettingsButtons(void) {
     static uint32_t lastSelectPress = 0;
     static uint32_t lastIncrementPress = 0;
@@ -509,8 +592,16 @@ void handleStopwatch(void) {
     }
 }
 // Display settings mode
+/**
+ * @brief Displays time-setting interface on LCD
+ *
+ * Selected field blinks at 500ms interval for user feedback.
+ * Brackets indicate the currently editable field.
+ */
+
 void displaySettings(void) {
     char buffer[17];
+    // Software-controlled blink for selected field
 
     // Blink every 500ms
     static uint32_t lastBlink = 0;
@@ -550,6 +641,10 @@ void displaySettings(void) {
     LCD_WriteStringXY(1, 0, buffer);
 }
 // 1. Define the pixel data for the rocket and flames (4 custom characters)
+/* ================= LCD CUSTOM CHARACTERS =================
+ * Custom CGRAM characters used for startup animation.
+ * Adds visual feedback and improves system aesthetics.
+ * ========================================================= */
 
 // Character 0: The top of the rocket
 uint8_t rocket_top[8] = {
@@ -611,6 +706,12 @@ void LCD_CreateChar(uint8_t location, uint8_t charmap[]) {
 }
 */
 
+/**
+ * @brief Displays startup rocket animation on LCD
+ *
+ * Uses LCD CGRAM custom characters for visual effects.
+ * Enhances user experience during system startup.
+ */
 
 // 2. Create the animation function
 void playRocketAnimation(void) {
