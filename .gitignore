@@ -1,0 +1,21 @@
+# ===== STM32CubeIDE build output =====
+Debug/
+Release/
+
+# ===== IDE files =====
+.settings/
+*.launch
+
+# ===== OS junk =====
+Thumbs.db
+.DS_Store
+
+# ===== Media files (DO NOT track) =====
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.mov
+
+# ===== PDFs (optional, comment if needed) =====
+# *.pdf
